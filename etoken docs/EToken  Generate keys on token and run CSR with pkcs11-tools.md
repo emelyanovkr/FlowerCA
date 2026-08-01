@@ -39,3 +39,13 @@ ssh-keygen -f MY.pem -i -m PKCS8 > MY.openssh.pub
 ```
 
 DONE!
+
+## P.S.
+
+To create DN do the following:
+```
+# Just use openssl to generate and view DN
+openssl req -new -x509 -keyout temp.key -out temp.crt -days 1
+# Copy the Subject DN from output of:
+openssl x509 -in temp.crt -noout -subject
+```
