@@ -1,3 +1,11 @@
+# This won't work for root CA Certificate
+## Reasons: the following can't be set via `p11mkcert`
+
+- Key Usage:	Certificate Sign, CRL Sign	(actual - Digital Signature only)
+- basicConstraints: critical, CA:TRUE, pathlen:0	(actual - CA:FALSE)
+- 
+
+
 # Step 1: Generate RSA key on the token
 ```
 p11keygen -l /usr/lib/libeToken.so -k rsa -b 2048 -i flower-ca-root encrypt decrypt sign verify
