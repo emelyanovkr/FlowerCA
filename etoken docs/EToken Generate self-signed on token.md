@@ -1,6 +1,6 @@
 # Step 1: Generate RSA key on the token
 ```
-p11keygen -l /usr/lib/libeToken.so -k rsa -b 2048 -i flower-ca-root-rsa-2048 encrypt decrypt sign verify
+p11keygen -l /usr/lib/libeToken.so -k rsa -b 2048 -i flower-ca-root-rsa-2048 sign verify
 ```
 
 # Step 2: Self-sign the certificate directly on the token
