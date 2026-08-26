@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: FlowerCA
+  datasource:
+    url: jdbc:mysql://localhost:3306/flowerca
+    username: flowerca
+    password: ""
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+flowerca:
+  issuer:
+    enabled: true
+    key-store: file:dev/pki/generated/intermediate-ca.p12
+    alias: flowerca-intermediate
+    password: ""
+    trusted-root: file:dev/pki/generated/root-ca.cert.pem
