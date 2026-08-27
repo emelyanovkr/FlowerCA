@@ -33,14 +33,15 @@ class Pkcs12IssuerIdentityLoaderTests {
   private static final String ALIAS = "flowerca-intermediate";
   private static final String PASSWORD = "changeit";
 
+  private final Pkcs12IssuerIdentityLoader loader = new Pkcs12IssuerIdentityLoader();
+
   @TempDir Path tempDirectory;
 
   @Test
   void loadsValidIntermediateIdentity() throws Exception {
     TestCaFiles files = createTestCaFiles("valid");
 
-    IssuerIdentity identity =
-        new Pkcs12IssuerIdentityLoader().load(properties(files, PASSWORD, ALIAS));
+    IssuerIdentity identity = loader.load(properties(files, PASSWORD, ALIAS));
 
     assertThat(identity.privateKey().getAlgorithm()).isEqualTo("RSA");
     assertThat(identity.certificate().getSubjectX500Principal().getName())
@@ -51,11 +52,9 @@ class Pkcs12IssuerIdentityLoaderTests {
   @Test
   void rejectsWrongPassword() throws Exception {
     TestCaFiles files = createTestCaFiles("wrong-password");
+    IssuerProperties properties = properties(files, "incorrect-password", ALIAS);
 
-    assertThatThrownBy(
-            () ->
-                new Pkcs12IssuerIdentityLoader()
-                    .load(properties(files, "incorrect-password", ALIAS)))
+    assertThatThrownBy(() -> loader.load(properties))
         .isInstanceOf(IssuerIdentityException.class)
         .hasMessage("Unable to load Intermediate CA identity");
   }
@@ -63,11 +62,9 @@ class Pkcs12IssuerIdentityLoaderTests {
   @Test
   void rejectsMissingAlias() throws Exception {
     TestCaFiles files = createTestCaFiles("missing-alias");
+    IssuerProperties properties = properties(files, PASSWORD, "missing");
 
-    assertThatThrownBy(
-            () ->
-                new Pkcs12IssuerIdentityLoader()
-                    .load(properties(files, PASSWORD, "missing")))
+    assertThatThrownBy(() -> loader.load(properties))
         .isInstanceOf(IssuerIdentityException.class)
         .hasMessage("Intermediate CA alias not found: missing");
   }
@@ -79,7 +76,7 @@ class Pkcs12IssuerIdentityLoaderTests {
     IssuerProperties properties = properties(files, PASSWORD, ALIAS);
     properties.setTrustedRoot(new FileSystemResource(otherCa.rootCertificate()));
 
-    assertThatThrownBy(() -> new Pkcs12IssuerIdentityLoader().load(properties))
+    assertThatThrownBy(() -> loader.load(properties))
         .isInstanceOf(IssuerIdentityException.class)
         .hasMessage(
             "Intermediate CA chain does not terminate at the configured trusted Root CA");

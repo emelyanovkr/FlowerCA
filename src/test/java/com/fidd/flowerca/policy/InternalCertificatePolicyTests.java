@@ -40,6 +40,37 @@ class InternalCertificatePolicyTests {
   }
 
   @Test
+  void rejectsDnsLabelLongerThan63Characters() throws Exception {
+    String dnsName = "a".repeat(64) + ".internal";
+    ParsedCsr csr = csr(rsaPublicKey(2048), dnsName);
+
+    assertThatThrownBy(() -> policy.validate(csr))
+        .isInstanceOf(CertificatePolicyException.class)
+        .hasMessage("DNS name must be a valid name inside .internal: " + dnsName);
+  }
+
+  @Test
+  void rejectsDnsNameWithInvalidLabelCharacters() throws Exception {
+    String dnsName = "service_a.internal";
+    ParsedCsr csr = csr(rsaPublicKey(2048), dnsName);
+
+    assertThatThrownBy(() -> policy.validate(csr))
+        .isInstanceOf(CertificatePolicyException.class)
+        .hasMessage("DNS name must be a valid name inside .internal: " + dnsName);
+  }
+
+  @Test
+  void rejectsDnsNameLongerThan253Characters() throws Exception {
+    String dnsName =
+        String.join(".", "a".repeat(63), "b".repeat(63), "c".repeat(63), "d".repeat(55), "internal");
+    ParsedCsr csr = csr(rsaPublicKey(2048), dnsName);
+
+    assertThatThrownBy(() -> policy.validate(csr))
+        .isInstanceOf(CertificatePolicyException.class)
+        .hasMessage("DNS name must be a valid name inside .internal: " + dnsName);
+  }
+
+  @Test
   void rejectsWildcardDnsName() throws Exception {
     ParsedCsr csr = csr(rsaPublicKey(2048), "*.internal");
 

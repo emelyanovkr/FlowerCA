@@ -60,8 +60,9 @@ class CsrParserTests {
     PKCS10CertificationRequest request = createCsr("service-a.internal");
     byte[] damaged = request.getEncoded();
     damaged[damaged.length - 1] ^= 0x01;
+    String pem = toPem(new PKCS10CertificationRequest(damaged));
 
-    assertThatThrownBy(() -> parser.parse(toPem(new PKCS10CertificationRequest(damaged))))
+    assertThatThrownBy(() -> parser.parse(pem))
         .isInstanceOf(CsrParsingException.class)
         .hasMessage("CSR signature is invalid");
   }

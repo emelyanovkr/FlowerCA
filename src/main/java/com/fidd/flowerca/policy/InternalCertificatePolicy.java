@@ -6,7 +6,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -15,9 +14,8 @@ public class InternalCertificatePolicy {
   static final int MINIMUM_RSA_KEY_SIZE = 2048;
 
   private static final String ALLOWED_DNS_SUFFIX = ".internal";
-  private static final Pattern DNS_NAME =
-      Pattern.compile(
-          "(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+internal");
+  private static final int MAXIMUM_DNS_NAME_LENGTH = 253;
+  private static final int MAXIMUM_DNS_LABEL_LENGTH = 63;
 
   public void validate(ParsedCsr csr) {
     if (csr == null) {
@@ -52,7 +50,7 @@ public class InternalCertificatePolicy {
         throw new CertificatePolicyException("Wildcard DNS names are not supported: " + dnsName);
       }
       if (!normalizedName.endsWith(ALLOWED_DNS_SUFFIX)
-          || !DNS_NAME.matcher(normalizedName).matches()) {
+          || !isValidDnsName(normalizedName)) {
         throw new CertificatePolicyException(
             "DNS name must be a valid name inside .internal: " + dnsName);
       }
@@ -60,6 +58,43 @@ public class InternalCertificatePolicy {
         throw new CertificatePolicyException("Duplicate DNS SAN: " + dnsName);
       }
     }
+  }
+
+  private boolean isValidDnsName(String dnsName) {
+    if (dnsName.length() > MAXIMUM_DNS_NAME_LENGTH) {
+      return false;
+    }
+
+    String[] labels = dnsName.split("\\.", -1);
+    for (String label : labels) {
+      if (!isValidDnsLabel(label)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private boolean isValidDnsLabel(String label) {
+    if (label.isEmpty() || label.length() > MAXIMUM_DNS_LABEL_LENGTH) {
+      return false;
+    }
+    if (isAsciiLetterOrDigit(label.charAt(0))
+        || isAsciiLetterOrDigit(label.charAt(label.length() - 1))) {
+      return false;
+    }
+
+    for (int index = 1; index < label.length() - 1; index++) {
+      char character = label.charAt(index);
+      if (isAsciiLetterOrDigit(character) && character != '-') {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private boolean isAsciiLetterOrDigit(char character) {
+    return (character < 'a' || character > 'z')
+            && (character < '0' || character > '9');
   }
 
   private String normalize(String dnsName) {
