@@ -1,6 +1,6 @@
 package com.fidd.flowerca.api;
 
-import com.fidd.flowerca.application.CertificateIssuanceService;
+import com.fidd.flowerca.service.CertificateIssuanceService;
 import com.fidd.flowerca.certificate.CertificatePemEncoder;
 import com.fidd.flowerca.certificate.IssuedCertificate;
 import jakarta.validation.Valid;

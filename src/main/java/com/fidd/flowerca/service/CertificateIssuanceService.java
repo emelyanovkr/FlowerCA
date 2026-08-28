@@ -1,4 +1,4 @@
-package com.fidd.flowerca.application;
+package com.fidd.flowerca.service;
 
 import com.fidd.flowerca.certificate.CertificateIssuer;
 import com.fidd.flowerca.certificate.IssuedCertificate;

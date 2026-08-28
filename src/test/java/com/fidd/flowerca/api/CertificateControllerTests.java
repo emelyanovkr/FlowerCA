@@ -6,7 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.fidd.flowerca.application.CertificateIssuanceService;
+import com.fidd.flowerca.service.CertificateIssuanceService;
 import com.fidd.flowerca.certificate.CertificatePemEncoder;
 import com.fidd.flowerca.certificate.IssuedCertificate;
 import com.fidd.flowerca.csr.CsrParsingException;

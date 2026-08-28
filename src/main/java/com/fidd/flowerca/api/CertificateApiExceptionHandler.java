@@ -3,6 +3,7 @@ package com.fidd.flowerca.api;
 import com.fidd.flowerca.certificate.CertificateIssuanceException;
 import com.fidd.flowerca.csr.CsrParsingException;
 import com.fidd.flowerca.policy.CertificatePolicyException;
+import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -28,7 +29,7 @@ public class CertificateApiExceptionHandler {
     String message =
         exception.getBindingResult().getFieldErrors().stream()
             .findFirst()
-            .map(error -> error.getDefaultMessage())
+            .map(DefaultMessageSourceResolvable::getDefaultMessage)
             .orElse("Request is invalid");
     return ResponseEntity.badRequest().body(new ApiError("INVALID_REQUEST", message));
   }
