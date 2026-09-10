@@ -1,6 +1,8 @@
 package com.fidd.flowerca.persistence.entity;
 
+import com.fidd.flowerca.persistence.model.AuditAction;
 import com.fidd.flowerca.persistence.model.AuditResult;
+import com.fidd.flowerca.persistence.model.AuditTargetType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -24,11 +26,13 @@ public class AuditEventEntity extends AbstractUuidEntity {
   @Column(name = "actor_certificate_id", columnDefinition = "BINARY(16)")
   private UUID actorCertificateId;
 
+  @Enumerated(EnumType.STRING)
   @Column(name = "action", nullable = false, length = 64)
-  private String action;
+  private AuditAction action;
 
+  @Enumerated(EnumType.STRING)
   @Column(name = "target_type", nullable = false, length = 64)
-  private String targetType;
+  private AuditTargetType targetType;
 
   @JdbcTypeCode(SqlTypes.BINARY)
   @Column(name = "target_id", columnDefinition = "BINARY(16)")
@@ -50,8 +54,8 @@ public class AuditEventEntity extends AbstractUuidEntity {
   public AuditEventEntity(
       UUID actorProfileId,
       UUID actorCertificateId,
-      String action,
-      String targetType,
+      AuditAction action,
+      AuditTargetType targetType,
       UUID targetId,
       AuditResult result,
       String details) {
@@ -72,11 +76,11 @@ public class AuditEventEntity extends AbstractUuidEntity {
     return actorCertificateId;
   }
 
-  public String getAction() {
+  public AuditAction getAction() {
     return action;
   }
 
-  public String getTargetType() {
+  public AuditTargetType getTargetType() {
     return targetType;
   }
 

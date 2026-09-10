@@ -24,12 +24,6 @@ import org.springframework.stereotype.Component;
 @Component
 public class CsrParser {
 
-  // todo: админ может создать сертификта с новым профилем пользователя, привязать к существующему профилю
-  // саморегистрация пользователей через ACME или rest api
-  // rest api эндпоинт для админа реализации crud операций с mtls
-  // rest api для пользователей
-  // ocsp модуль для проверки сертификатов
-  // acme для клиентских сертификатов
   public ParsedCsr parse(String pem) {
     if (pem == null || pem.isBlank()) {
       throw new CsrParsingException("CSR must not be blank");
@@ -43,13 +37,11 @@ public class CsrParser {
       X500Principal subject = new X500Principal(request.getSubject().getEncoded());
       List<String> dnsNames = extractDnsSubjectAlternativeNames(request);
       return new ParsedCsr(subject, publicKey, publicKey.getAlgorithm(), dnsNames);
-    } catch (CsrParsingException exception) {
-      throw exception;
     } catch (GeneralSecurityException
-        | IOException
-        | OperatorCreationException
-        | PKCSException
-        | IllegalArgumentException exception) {
+             | IOException
+             | OperatorCreationException
+             | PKCSException
+             | IllegalArgumentException exception) {
       throw new CsrParsingException("Unable to parse CSR", exception);
     }
   }

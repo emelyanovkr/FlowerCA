@@ -4,13 +4,15 @@ CREATE TABLE ca_issuers (
     subject_dn VARCHAR(1024) NOT NULL,
     serial_number VARBINARY(20) NOT NULL,
     subject_key_identifier VARBINARY(64) NOT NULL,
+    fingerprint_sha256 VARBINARY(32) NOT NULL,
     certificate_der MEDIUMBLOB NOT NULL,
     status VARCHAR(32) NOT NULL,
     not_before DATETIME(6) NOT NULL,
     not_after DATETIME(6) NOT NULL,
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     CONSTRAINT pk_ca_issuers PRIMARY KEY (id),
-    CONSTRAINT uk_ca_issuers_name UNIQUE (name)
+    CONSTRAINT uk_ca_issuers_name UNIQUE (name),
+    CONSTRAINT uk_ca_issuers_fingerprint_sha256 UNIQUE (fingerprint_sha256)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE user_profiles (

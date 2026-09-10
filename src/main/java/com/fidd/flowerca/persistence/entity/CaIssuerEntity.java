@@ -26,6 +26,9 @@ public class CaIssuerEntity extends AbstractUuidEntity {
   @Column(name = "subject_key_identifier", nullable = false, length = 64)
   private byte[] subjectKeyIdentifier;
 
+  @Column(name = "fingerprint_sha256", nullable = false, unique = true, length = 32)
+  private byte[] fingerprintSha256;
+
   @Lob
   @Column(name = "certificate_der", nullable = false, columnDefinition = "MEDIUMBLOB")
   private byte[] certificateDer;
@@ -51,6 +54,7 @@ public class CaIssuerEntity extends AbstractUuidEntity {
       String subjectDn,
       byte[] serialNumber,
       byte[] subjectKeyIdentifier,
+      byte[] fingerprintSha256,
       byte[] certificateDer,
       Instant notBefore,
       Instant notAfter) {
@@ -58,6 +62,7 @@ public class CaIssuerEntity extends AbstractUuidEntity {
     this.subjectDn = subjectDn;
     this.serialNumber = serialNumber.clone();
     this.subjectKeyIdentifier = subjectKeyIdentifier.clone();
+    this.fingerprintSha256 = fingerprintSha256.clone();
     this.certificateDer = certificateDer.clone();
     this.status = CaIssuerStatus.ACTIVE;
     this.notBefore = notBefore;
@@ -78,6 +83,10 @@ public class CaIssuerEntity extends AbstractUuidEntity {
 
   public byte[] getSubjectKeyIdentifier() {
     return subjectKeyIdentifier.clone();
+  }
+
+  public byte[] getFingerprintSha256() {
+    return fingerprintSha256.clone();
   }
 
   public byte[] getCertificateDer() {

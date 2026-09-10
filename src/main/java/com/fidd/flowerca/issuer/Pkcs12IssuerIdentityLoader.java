@@ -42,8 +42,6 @@ public class Pkcs12IssuerIdentityLoader {
       validateChain(chain, trustedRoot);
 
       return new IssuerIdentity(privateKey, issuerCertificate, chain);
-    } catch (IssuerIdentityException exception) {
-      throw exception;
     } catch (GeneralSecurityException | IOException exception) {
       throw new IssuerIdentityException("Unable to load Intermediate CA identity", exception);
     } finally {
