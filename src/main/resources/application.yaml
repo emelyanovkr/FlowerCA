@@ -14,6 +14,9 @@ spring:
     locations: classpath:db/migration
 
 flowerca:
+  bootstrap:
+    admin:
+      enabled: false
   issuer:
     enabled: true
     key-store: file:dev/pki/generated/intermediate-ca.p12

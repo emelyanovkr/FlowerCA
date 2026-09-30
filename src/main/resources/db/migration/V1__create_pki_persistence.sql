@@ -58,6 +58,7 @@ CREATE TABLE audit_events (
     id BINARY(16) NOT NULL,
     actor_profile_id BINARY(16) NULL,
     actor_certificate_id BINARY(16) NULL,
+    actor_certificate_fingerprint_sha256 VARBINARY(32) NULL,
     action VARCHAR(64) NOT NULL,
     target_type VARCHAR(64) NOT NULL,
     target_id BINARY(16) NULL,

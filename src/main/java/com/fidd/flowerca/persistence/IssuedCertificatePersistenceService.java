@@ -5,10 +5,10 @@ import com.fidd.flowerca.issuer.IssuerIdentity;
 import com.fidd.flowerca.persistence.entity.AuditEventEntity;
 import com.fidd.flowerca.persistence.entity.CaIssuerEntity;
 import com.fidd.flowerca.persistence.entity.CertificateEntity;
+import com.fidd.flowerca.persistence.entity.UserProfileEntity;
 import com.fidd.flowerca.persistence.model.AuditAction;
 import com.fidd.flowerca.persistence.model.AuditResult;
 import com.fidd.flowerca.persistence.model.AuditTargetType;
-import com.fidd.flowerca.persistence.model.CertificateProfile;
 import com.fidd.flowerca.persistence.repository.AuditEventRepository;
 import com.fidd.flowerca.persistence.repository.CertificateRepository;
 import org.springframework.stereotype.Service;
@@ -34,22 +34,44 @@ public class IssuedCertificatePersistenceService {
   }
 
   @Transactional
-  public void persist(
+  public CertificateEntity persist(
       IssuerIdentity issuerIdentity,
       IssuedCertificate issuedCertificate,
-      CertificateProfile profile) {
+      UserProfileEntity owner) {
+    validateOwnership(issuedCertificate, owner);
     CaIssuerEntity issuer = issuerRegistry.requireRegistered(issuerIdentity);
     CertificateEntity certificate =
         certificates.save(
-            certificateFactory.create(null, issuer, profile, issuedCertificate.certificate()));
+            certificateFactory.create(
+                owner, issuer, issuedCertificate.profile(), issuedCertificate.certificate()));
     auditEvents.save(
         new AuditEventEntity(
+            null,
             null,
             null,
             AuditAction.CERTIFICATE_ISSUED,
             AuditTargetType.CERTIFICATE,
             certificate.getId(),
             AuditResult.SUCCESS,
-            "{\"profile\":\"" + profile.name() + "\"}"));
+            "{\"profile\":\"" + issuedCertificate.profile().name() + "\"}"));
+    return certificate;
+  }
+
+  private void validateOwnership(
+      IssuedCertificate issuedCertificate, UserProfileEntity owner) {
+    switch (issuedCertificate.profile()) {
+      case TLS_SERVER -> {
+        if (owner != null) {
+          throw new CertificatePersistenceException(
+              "TLS server certificates cannot have a user owner");
+        }
+      }
+      case USER_CLIENT, ADMIN_CLIENT -> {
+        if (owner == null) {
+          throw new CertificatePersistenceException(
+              "Client certificates require a user owner");
+        }
+      }
+    }
   }
 }

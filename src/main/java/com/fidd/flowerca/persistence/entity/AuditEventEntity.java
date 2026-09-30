@@ -26,6 +26,9 @@ public class AuditEventEntity extends AbstractUuidEntity {
   @Column(name = "actor_certificate_id", columnDefinition = "BINARY(16)")
   private UUID actorCertificateId;
 
+  @Column(name = "actor_certificate_fingerprint_sha256", length = 32)
+  private byte[] actorCertificateFingerprintSha256;
+
   @Enumerated(EnumType.STRING)
   @Column(name = "action", nullable = false, length = 64)
   private AuditAction action;
@@ -54,6 +57,7 @@ public class AuditEventEntity extends AbstractUuidEntity {
   public AuditEventEntity(
       UUID actorProfileId,
       UUID actorCertificateId,
+      byte[] actorCertificateFingerprintSha256,
       AuditAction action,
       AuditTargetType targetType,
       UUID targetId,
@@ -61,6 +65,10 @@ public class AuditEventEntity extends AbstractUuidEntity {
       String details) {
     this.actorProfileId = actorProfileId;
     this.actorCertificateId = actorCertificateId;
+    this.actorCertificateFingerprintSha256 =
+        actorCertificateFingerprintSha256 == null
+            ? null
+            : actorCertificateFingerprintSha256.clone();
     this.action = action;
     this.targetType = targetType;
     this.targetId = targetId;
@@ -74,6 +82,12 @@ public class AuditEventEntity extends AbstractUuidEntity {
 
   public UUID getActorCertificateId() {
     return actorCertificateId;
+  }
+
+  public byte[] getActorCertificateFingerprintSha256() {
+    return actorCertificateFingerprintSha256 == null
+        ? null
+        : actorCertificateFingerprintSha256.clone();
   }
 
   public AuditAction getAction() {

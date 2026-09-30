@@ -8,6 +8,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 
+import com.fidd.flowerca.certificate.CertificateIdentity;
 import com.fidd.flowerca.certificate.IssuedCertificate;
 import com.fidd.flowerca.issuer.IssuerIdentity;
 import com.fidd.flowerca.persistence.entity.AuditEventEntity;
@@ -65,8 +66,9 @@ class PersistenceRepositoriesTests {
   @Test
   void issuesCertificateAndPersistsAllCertificateFields() throws Exception {
     IssuedCertificate issued =
-        issuanceService.issue(
-            testPki.createCsrPem("service-a.internal", "api.team.internal"));
+        issuanceService.issueTlsServer(
+            testPki.createCsrPem("csr-claim.internal"),
+            tlsServerIdentity("service-a.internal", "api.team.internal"));
     CaIssuerEntity issuer = currentIssuer();
     byte[] serialNumber = unsigned(issued.certificate().getSerialNumber().toByteArray());
     byte[] expectedDer = issued.certificate().getEncoded();
@@ -106,7 +108,9 @@ class PersistenceRepositoriesTests {
   @Test
   void restoresPersistedCertificateFromDer() throws Exception {
     IssuedCertificate issued =
-        issuanceService.issue(testPki.createCsrPem("der-round-trip.internal"));
+        issuanceService.issueTlsServer(
+            testPki.createCsrPem("untrusted-csr-name.internal"),
+            tlsServerIdentity("der-round-trip.internal"));
     CaIssuerEntity issuer = currentIssuer();
     byte[] serialNumber = unsigned(issued.certificate().getSerialNumber().toByteArray());
 
@@ -130,9 +134,13 @@ class PersistenceRepositoriesTests {
   void usesRegisteredIssuerForMultipleCertificates() throws Exception {
     CaIssuerEntity issuer = currentIssuer();
     IssuedCertificate first =
-        issuanceService.issue(testPki.createCsrPem("issuer-one.internal"));
+        issuanceService.issueTlsServer(
+            testPki.createCsrPem("csr-one.internal"),
+            tlsServerIdentity("issuer-one.internal"));
     IssuedCertificate second =
-        issuanceService.issue(testPki.createCsrPem("issuer-two.internal"));
+        issuanceService.issueTlsServer(
+            testPki.createCsrPem("csr-two.internal"),
+            tlsServerIdentity("issuer-two.internal"));
 
     entityManager.clear();
 
@@ -176,6 +184,7 @@ class PersistenceRepositoriesTests {
                 now.plusSeconds(3600)));
     auditEvents.save(
         new AuditEventEntity(
+            null,
             null,
             null,
             AuditAction.CERTIFICATE_ISSUED,
@@ -224,7 +233,7 @@ class PersistenceRepositoriesTests {
       assertThatThrownBy(
               () ->
                   persistenceService.persist(
-                      issuerIdentity, issuedCertificate, CertificateProfile.TLS_SERVER))
+                      issuerIdentity, issuedCertificate, null))
           .isInstanceOf(IllegalStateException.class)
           .hasMessage("forced audit failure");
     } finally {
@@ -242,7 +251,7 @@ class PersistenceRepositoriesTests {
     persistenceService.persist(
         issuerIdentity,
         issuedCertificate(serialNumber, uniqueDer("serial-original")),
-        CertificateProfile.TLS_SERVER);
+        null);
     long certificateCountBeforeConflict = certificates.count();
     long auditCountBeforeConflict = auditEvents.count();
 
@@ -251,7 +260,7 @@ class PersistenceRepositoriesTests {
                 persistenceService.persist(
                     issuerIdentity,
                     issuedCertificate(serialNumber, uniqueDer("serial-conflict")),
-                    CertificateProfile.TLS_SERVER))
+                    null))
         .isInstanceOf(DataIntegrityViolationException.class);
 
     entityManager.clear();
@@ -265,7 +274,7 @@ class PersistenceRepositoriesTests {
     persistenceService.persist(
         issuerIdentity,
         issuedCertificate(new byte[] {0x33}, certificateDer),
-        CertificateProfile.TLS_SERVER);
+        null);
     long certificateCountBeforeConflict = certificates.count();
     long auditCountBeforeConflict = auditEvents.count();
 
@@ -274,7 +283,7 @@ class PersistenceRepositoriesTests {
                 persistenceService.persist(
                     issuerIdentity,
                     issuedCertificate(new byte[] {0x34}, certificateDer),
-                    CertificateProfile.TLS_SERVER))
+                    null))
         .isInstanceOf(DataIntegrityViolationException.class);
 
     entityManager.clear();
@@ -294,11 +303,18 @@ class PersistenceRepositoriesTests {
         .thenReturn(new X500Principal("CN=Persistence Transaction Test"));
     when(certificate.getNotBefore()).thenReturn(Date.from(Instant.parse("2026-01-01T00:00:00Z")));
     when(certificate.getNotAfter()).thenReturn(Date.from(Instant.parse("2027-01-01T00:00:00Z")));
-    return new IssuedCertificate(certificate, List.of(issuerIdentity.certificate()));
+    return new IssuedCertificate(
+        certificate,
+        List.of(issuerIdentity.certificate()),
+        CertificateProfile.TLS_SERVER);
   }
 
   private byte[] uniqueDer(String label) {
     return (label + "-" + UUID.randomUUID()).getBytes(StandardCharsets.UTF_8);
+  }
+
+  private CertificateIdentity.TlsServer tlsServerIdentity(String... dnsNames) {
+    return new CertificateIdentity.TlsServer(List.of(dnsNames));
   }
 
   private CaIssuerEntity currentIssuer() throws Exception {

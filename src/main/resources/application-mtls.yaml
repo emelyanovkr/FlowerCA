@@ -1,0 +1,11 @@
+server:
+  ssl:
+    enabled: true
+    key-store: ${FLOWERCA_TLS_KEY_STORE}
+    key-store-password: ${FLOWERCA_TLS_KEY_STORE_PASSWORD}
+    key-store-type: PKCS12
+    trust-store: ${FLOWERCA_TLS_TRUST_STORE}
+    trust-store-password: ${FLOWERCA_TLS_TRUST_STORE_PASSWORD}
+    trust-store-type: PKCS12
+    client-auth: want
+    enabled-protocols: TLSv1.3,TLSv1.2

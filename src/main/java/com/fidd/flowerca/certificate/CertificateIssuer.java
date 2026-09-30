@@ -2,15 +2,24 @@ package com.fidd.flowerca.certificate;
 
 import com.fidd.flowerca.csr.ParsedCsr;
 import com.fidd.flowerca.issuer.IssuerIdentity;
+import com.fidd.flowerca.persistence.model.CertificateProfile;
 import com.fidd.flowerca.policy.InternalCertificatePolicy;
+import java.io.IOException;
 import java.math.BigInteger;
+import java.security.PrivateKey;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+import javax.security.auth.x500.X500Principal;
+import org.bouncycastle.asn1.x500.X500NameBuilder;
+import org.bouncycastle.asn1.x500.style.BCStyle;
 import org.bouncycastle.asn1.x509.BasicConstraints;
 import org.bouncycastle.asn1.x509.ExtendedKeyUsage;
 import org.bouncycastle.asn1.x509.Extension;
@@ -35,8 +44,6 @@ public class CertificateIssuer {
   static final Duration CERTIFICATE_LIFETIME = Duration.ofDays(30);
   static final Duration CLOCK_SKEW = Duration.ofMinutes(5);
 
-  private static final String SIGNATURE_ALGORITHM = "SHA256withRSA";
-
   private final IssuerIdentity issuerIdentity;
   private final InternalCertificatePolicy policy;
   private final Clock clock;
@@ -59,28 +66,39 @@ public class CertificateIssuer {
     this.secureRandom = secureRandom;
   }
 
-  public IssuedCertificate issue(ParsedCsr csr) {
-    policy.validate(csr);
+  public IssuedCertificate issue(
+      ParsedCsr csr, CertificateProfile profile, CertificateIdentity identity) {
+    policy.validate(csr, profile, identity);
 
     try {
       Instant now = clock.instant().truncatedTo(ChronoUnit.SECONDS);
-      Date notBefore = Date.from(now.minus(CLOCK_SKEW));
-      Date notAfter = Date.from(now.plus(CERTIFICATE_LIFETIME));
+      Instant notBefore =
+          laterOf(
+              now.minus(CLOCK_SKEW),
+              issuerIdentity.certificate().getNotBefore().toInstant());
+      Instant notAfter =
+          earlierOf(
+              now.plus(CERTIFICATE_LIFETIME),
+              issuerIdentity.certificate().getNotAfter().toInstant());
+      if (notBefore.isAfter(now) || !notAfter.isAfter(now)) {
+        throw new CertificateIssuanceException(
+            "Intermediate CA validity does not allow issuing a currently valid leaf certificate");
+      }
       BigInteger serialNumber = generateSerialNumber();
 
       JcaX509v3CertificateBuilder builder =
           new JcaX509v3CertificateBuilder(
               issuerIdentity.certificate(),
               serialNumber,
-              notBefore,
-              notAfter,
-              csr.subject(),
+              Date.from(notBefore),
+              Date.from(notAfter),
+              subjectFor(profile, identity),
               csr.publicKey());
 
-      addLeafExtensions(builder, csr);
+      addLeafExtensions(builder, profile, identity, csr);
 
       ContentSigner signer =
-          new JcaContentSignerBuilder(SIGNATURE_ALGORITHM)
+          new JcaContentSignerBuilder(signatureAlgorithmFor(issuerIdentity.privateKey()))
               .build(issuerIdentity.privateKey());
       X509CertificateHolder holder = builder.build(signer);
       X509Certificate certificate =
@@ -88,24 +106,30 @@ public class CertificateIssuer {
 
       certificate.verify(issuerIdentity.certificate().getPublicKey());
       certificate.checkValidity(Date.from(now));
-      return new IssuedCertificate(certificate, issuerIdentity.chain());
+      return new IssuedCertificate(certificate, issuerIdentity.chain(), profile);
+    } catch (CertificateIssuanceException exception) {
+      throw exception;
     } catch (Exception exception) {
       throw new CertificateIssuanceException("Unable to issue certificate", exception);
     }
   }
 
-  private void addLeafExtensions(JcaX509v3CertificateBuilder builder, ParsedCsr csr)
+  private void addLeafExtensions(
+      JcaX509v3CertificateBuilder builder,
+      CertificateProfile profile,
+      CertificateIdentity identity,
+      ParsedCsr csr)
       throws Exception {
     JcaX509ExtensionUtils extensionUtils = new JcaX509ExtensionUtils();
     builder.addExtension(Extension.basicConstraints, true, new BasicConstraints(false));
     builder.addExtension(
         Extension.keyUsage,
         true,
-        new KeyUsage(KeyUsage.digitalSignature | KeyUsage.keyEncipherment));
+        keyUsageFor(profile));
     builder.addExtension(
         Extension.extendedKeyUsage,
         false,
-        new ExtendedKeyUsage(KeyPurposeId.id_kp_serverAuth));
+        extendedKeyUsageFor(profile));
     builder.addExtension(
         Extension.subjectKeyIdentifier,
         false,
@@ -115,12 +139,94 @@ public class CertificateIssuer {
         false,
         extensionUtils.createAuthorityKeyIdentifier(issuerIdentity.certificate()));
 
-    GeneralName[] names =
-        csr.dnsSubjectAlternativeNames().stream()
-            .map(name -> new GeneralName(GeneralName.dNSName, name))
-            .toArray(GeneralName[]::new);
     builder.addExtension(
-        Extension.subjectAlternativeName, false, new GeneralNames(names));
+        Extension.subjectAlternativeName,
+        false,
+        new GeneralNames(subjectAlternativeNamesFor(profile, identity)));
+  }
+
+  private X500Principal subjectFor(
+      CertificateProfile profile, CertificateIdentity identity)
+      throws IOException {
+    String commonName =
+        switch (profile) {
+          case TLS_SERVER ->
+              ((CertificateIdentity.TlsServer) identity)
+                  .dnsNames()
+                  .getFirst()
+                  .toLowerCase(Locale.ROOT);
+          case USER_CLIENT, ADMIN_CLIENT ->
+              ((CertificateIdentity.User) identity).displayName().trim();
+        };
+    X500NameBuilder subject = new X500NameBuilder(BCStyle.INSTANCE);
+    subject.addRDN(BCStyle.CN, commonName);
+    return new X500Principal(subject.build().getEncoded());
+  }
+
+  private KeyUsage keyUsageFor(CertificateProfile profile) {
+    return switch (profile) {
+      case TLS_SERVER ->
+          new KeyUsage(KeyUsage.digitalSignature | KeyUsage.keyEncipherment);
+      case USER_CLIENT, ADMIN_CLIENT -> new KeyUsage(KeyUsage.digitalSignature);
+    };
+  }
+
+  private ExtendedKeyUsage extendedKeyUsageFor(CertificateProfile profile) {
+    return switch (profile) {
+      case TLS_SERVER -> new ExtendedKeyUsage(KeyPurposeId.id_kp_serverAuth);
+      case USER_CLIENT, ADMIN_CLIENT ->
+          new ExtendedKeyUsage(KeyPurposeId.id_kp_clientAuth);
+    };
+  }
+
+  private GeneralName[] subjectAlternativeNamesFor(
+      CertificateProfile profile, CertificateIdentity identity) {
+    return switch (profile) {
+      case TLS_SERVER ->
+          ((CertificateIdentity.TlsServer) identity)
+              .dnsNames()
+              .stream()
+              .map(name -> new GeneralName(GeneralName.dNSName, name.toLowerCase(Locale.ROOT)))
+              .toArray(GeneralName[]::new);
+      case USER_CLIENT, ADMIN_CLIENT -> userSubjectAlternativeNames(
+          (CertificateIdentity.User) identity);
+    };
+  }
+
+  private GeneralName[] userSubjectAlternativeNames(
+      CertificateIdentity.User identity) {
+    List<GeneralName> names = new ArrayList<>();
+    names.add(
+        new GeneralName(
+            GeneralName.uniformResourceIdentifier,
+            "urn:flowerca:user:" + identity.profileId()));
+    if (identity.email() != null) {
+      names.add(
+          new GeneralName(
+              GeneralName.rfc822Name,
+              identity.email().trim().toLowerCase(Locale.ROOT)));
+    }
+    return names.toArray(GeneralName[]::new);
+  }
+
+  private String signatureAlgorithmFor(PrivateKey privateKey) {
+    return switch (privateKey.getAlgorithm()) {
+      case "RSA" -> "SHA256withRSA";
+      case "EC" -> "SHA256withECDSA";
+      case "Ed25519" -> "Ed25519";
+      case "Ed448" -> "Ed448";
+      default ->
+          throw new CertificateIssuanceException(
+              "Unsupported Intermediate private key algorithm");
+    };
+  }
+
+  private Instant laterOf(Instant first, Instant second) {
+    return first.isAfter(second) ? first : second;
+  }
+
+  private Instant earlierOf(Instant first, Instant second) {
+    return first.isBefore(second) ? first : second;
   }
 
   private BigInteger generateSerialNumber() {
