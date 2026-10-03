@@ -117,7 +117,7 @@ class CertificateIssuerTests {
     assertThat(certificate.getNotBefore())
         .isEqualTo(Date.from(NOW.minus(CertificateIssuer.CLOCK_SKEW)));
     assertThat(certificate.getNotAfter())
-        .isEqualTo(Date.from(NOW.plus(CertificateIssuer.CERTIFICATE_LIFETIME)));
+        .isEqualTo(Date.from(NOW.plus(java.time.Duration.ofDays(30))));
 
     assertThat(certificate.getBasicConstraints()).isEqualTo(-1);
     assertThat(certificate.getKeyUsage()[0]).isTrue(); // digitalSignature
@@ -252,6 +252,40 @@ class CertificateIssuerTests {
 
     assertThat(certificate.getSigAlgName()).isEqualTo("SHA256withECDSA");
     certificate.verify(ecIntermediate.getPublicKey());
+  }
+
+  @Test
+  void usesSeparateProfileLifetimes() throws Exception {
+    var lifetimes = new CertificateLifetimeProperties();
+    lifetimes.setTlsServer(Duration.ofDays(7));
+    lifetimes.setUserClient(Duration.ofDays(14));
+    lifetimes.setAdminClient(Duration.ofDays(90));
+    var issuer = new CertificateIssuer(
+        new IssuerIdentity(intermediateKeyPair.getPrivate(), intermediateCertificate,
+            List.of(intermediateCertificate, rootCertificate)),
+        new InternalCertificatePolicy(), Clock.fixed(NOW, ZoneOffset.UTC), new SecureRandom(), lifetimes);
+    var csr = new CsrParser().parse(createCsrPem("untrusted.internal"));
+    for (CertificateProfile profile : CertificateProfile.values()) {
+      CertificateIdentity identity = profile == CertificateProfile.TLS_SERVER
+          ? new CertificateIdentity.TlsServer(List.of("service.internal"))
+          : new CertificateIdentity.User(UUID.randomUUID(), "Admin", "admin@example.internal");
+      assertThat(issuer.issue(csr, profile, identity).certificate().getNotAfter().toInstant())
+          .isEqualTo(NOW.plus(lifetimes.forProfile(profile)));
+    }
+  }
+
+  @Test
+  void configuredAdminLifetimeStillCannotExceedIntermediateExpiry() throws Exception {
+    var lifetimes = new CertificateLifetimeProperties();
+    lifetimes.setAdminClient(Duration.ofDays(500));
+    var issuer = new CertificateIssuer(
+        new IssuerIdentity(intermediateKeyPair.getPrivate(), intermediateCertificate,
+            List.of(intermediateCertificate, rootCertificate)),
+        new InternalCertificatePolicy(), Clock.fixed(NOW, ZoneOffset.UTC), new SecureRandom(), lifetimes);
+    var issued = issuer.issue(new CsrParser().parse(createCsrPem("ignored.internal")),
+        CertificateProfile.ADMIN_CLIENT,
+        new CertificateIdentity.User(UUID.randomUUID(), "Admin", "admin@example.internal"));
+    assertThat(issued.certificate().getNotAfter()).isEqualTo(intermediateCertificate.getNotAfter());
   }
 
   private KeyPair rsaKeyPair(int size) throws Exception {

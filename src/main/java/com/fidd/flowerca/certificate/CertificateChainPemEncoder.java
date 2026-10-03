@@ -1,4 +1,4 @@
-package com.fidd.flowerca.bootstrap;
+package com.fidd.flowerca.certificate;
 
 import java.io.IOException;
 import java.io.StringWriter;
@@ -15,7 +15,7 @@ public class CertificateChainPemEncoder {
         writer.writeObject(certificate);
       }
     } catch (IOException exception) {
-      throw new AdminBootstrapException("Unable to encode admin certificate chain", exception);
+      throw new CertificateIssuanceException("Unable to encode certificate chain", exception);
     }
     return output.toString().getBytes(java.nio.charset.StandardCharsets.US_ASCII);
   }

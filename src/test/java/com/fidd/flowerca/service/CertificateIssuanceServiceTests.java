@@ -1,9 +1,11 @@
 package com.fidd.flowerca.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.fidd.flowerca.certificate.CertificateIdentity;
 import com.fidd.flowerca.certificate.CertificateIssuer;
@@ -15,6 +17,9 @@ import com.fidd.flowerca.persistence.IssuedCertificatePersistenceService;
 import com.fidd.flowerca.persistence.entity.CertificateEntity;
 import com.fidd.flowerca.persistence.entity.UserProfileEntity;
 import com.fidd.flowerca.persistence.model.CertificateProfile;
+import com.fidd.flowerca.persistence.model.UserRole;
+import com.fidd.flowerca.persistence.model.UserStatus;
+import com.fidd.flowerca.policy.CertificatePolicyException;
 import org.junit.jupiter.api.Test;
 import java.util.UUID;
 
@@ -62,6 +67,8 @@ class CertificateIssuanceServiceTests {
     CertificateIdentity.User approvedIdentity =
         new CertificateIdentity.User(ownerId, "Alice Admin", "alice@example.internal");
     when(owner.getId()).thenReturn(ownerId);
+    when(owner.getRole()).thenReturn(UserRole.ADMIN);
+    when(owner.getStatus()).thenReturn(UserStatus.ACTIVE);
     when(owner.getDisplayName()).thenReturn("Alice Admin");
     when(owner.getEmail()).thenReturn("alice@example.internal");
     when(parser.parse("admin-csr")).thenReturn(parsedCsr);
@@ -78,5 +85,29 @@ class CertificateIssuanceServiceTests {
     assertThat(result.certificateId()).isEqualTo(certificateId);
     verify(issuer).issue(parsedCsr, CertificateProfile.ADMIN_CLIENT, approvedIdentity);
     verify(persistence).persist(issuerIdentity, issued, owner);
+  }
+
+  @Test
+  void refusesAdminCertificateForOrdinaryUserBeforeParsingOrSigning() {
+    assertRejectedOwner(UserRole.USER, UserStatus.ACTIVE);
+  }
+
+  @Test
+  void refusesAdminCertificateForBlockedAdministratorBeforeParsingOrSigning() {
+    assertRejectedOwner(UserRole.ADMIN, UserStatus.BLOCKED);
+  }
+
+  private void assertRejectedOwner(UserRole role, UserStatus status) {
+    CsrParser parser = mock(CsrParser.class);
+    CertificateIssuer issuer = mock(CertificateIssuer.class);
+    var persistence = mock(IssuedCertificatePersistenceService.class);
+    var owner = mock(UserProfileEntity.class);
+    when(owner.getId()).thenReturn(UUID.randomUUID());
+    when(owner.getRole()).thenReturn(role);
+    when(owner.getStatus()).thenReturn(status);
+    var service = new CertificateIssuanceService(parser, issuer, mock(IssuerIdentity.class), persistence);
+    assertThatThrownBy(() -> service.issueAdminClient("csr", owner))
+        .isInstanceOf(CertificatePolicyException.class);
+    verifyNoInteractions(parser, issuer, persistence);
   }
 }

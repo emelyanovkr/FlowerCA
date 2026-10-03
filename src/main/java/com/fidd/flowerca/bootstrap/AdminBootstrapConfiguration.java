@@ -1,5 +1,6 @@
 package com.fidd.flowerca.bootstrap;
 
+import com.fidd.flowerca.certificate.CertificateChainPemEncoder;
 import com.fidd.flowerca.csr.CsrParser;
 import com.fidd.flowerca.issuer.IssuerIdentity;
 import com.fidd.flowerca.persistence.CurrentIssuerRegistry;
@@ -41,11 +42,6 @@ public class AdminBootstrapConfiguration {
         issuanceService,
         csrParser,
         issuerIdentity);
-  }
-
-  @Bean
-  CertificateChainPemEncoder certificateChainPemEncoder() {
-    return new CertificateChainPemEncoder();
   }
 
   @Bean

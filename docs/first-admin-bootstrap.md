@@ -72,8 +72,17 @@ ignored.
   marker is committed and no certificate is returned. Fix the database/audit failure and rerun with
   the same identity and CSR.
 - If the database committed but writing the PEM output failed, fix the output directory and rerun
-  with exactly the same identity and CSR. FlowerCA exports the already-persisted certificate and
+  with exactly the same identity and CSR while the certificate is still valid. FlowerCA exports the already-persisted certificate and
   does not issue another one.
 - If a completed marker exists but the configured identity or CSR differs, startup fails. FlowerCA
   never silently replaces or rotates the first administrator. Recover the original private key/CSR
-  or perform an explicitly reviewed database recovery; do not delete bootstrap state casually.
+  without deleting bootstrap state casually. Operator recovery is not implemented yet.
+- If the completed certificate is expired or not yet valid, bootstrap fails rather than reporting
+  success or silently rotating the identity. Renew before expiry using the authenticated
+  `POST /api/v1/admin/certificates/renew` operation described in [the admin API guide](admin-mtls-api.md).
+  Renewal preserves the bootstrap marker as historical evidence; the marker continues to refer to
+  the original certificate, not its replacement. Once that original expires, re-running bootstrap
+  fails even if a renewed certificate is active. Keep bootstrap disabled after the initial export.
+- Expiry or loss of the only usable admin private key cannot be repaired through this endpoint.
+  A separate operator recovery procedure is deferred; do not deploy without accepting and planning
+  for that limitation.

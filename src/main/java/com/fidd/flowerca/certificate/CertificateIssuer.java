@@ -33,26 +33,26 @@ import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.stereotype.Component;
 
-@Component
-@ConditionalOnBean(IssuerIdentity.class)
 public class CertificateIssuer {
 
-  static final Duration CERTIFICATE_LIFETIME = Duration.ofDays(30);
   static final Duration CLOCK_SKEW = Duration.ofMinutes(5);
 
   private final IssuerIdentity issuerIdentity;
   private final InternalCertificatePolicy policy;
   private final Clock clock;
   private final SecureRandom secureRandom;
+  private final CertificateLifetimeProperties lifetimes;
 
-  @Autowired
   public CertificateIssuer(
       IssuerIdentity issuerIdentity, InternalCertificatePolicy policy) {
     this(issuerIdentity, policy, Clock.systemUTC(), new SecureRandom());
+  }
+
+  public CertificateIssuer(
+      IssuerIdentity issuerIdentity, InternalCertificatePolicy policy,
+      CertificateLifetimeProperties lifetimes) {
+    this(issuerIdentity, policy, Clock.systemUTC(), new SecureRandom(), lifetimes);
   }
 
   CertificateIssuer(
@@ -60,10 +60,17 @@ public class CertificateIssuer {
       InternalCertificatePolicy policy,
       Clock clock,
       SecureRandom secureRandom) {
+    this(issuerIdentity, policy, clock, secureRandom, new CertificateLifetimeProperties());
+  }
+
+  CertificateIssuer(
+      IssuerIdentity issuerIdentity, InternalCertificatePolicy policy,
+      Clock clock, SecureRandom secureRandom, CertificateLifetimeProperties lifetimes) {
     this.issuerIdentity = issuerIdentity;
     this.policy = policy;
     this.clock = clock;
     this.secureRandom = secureRandom;
+    this.lifetimes = lifetimes;
   }
 
   public IssuedCertificate issue(
@@ -78,7 +85,7 @@ public class CertificateIssuer {
               issuerIdentity.certificate().getNotBefore().toInstant());
       Instant notAfter =
           earlierOf(
-              now.plus(CERTIFICATE_LIFETIME),
+              now.plus(lifetimes.forProfile(profile)),
               issuerIdentity.certificate().getNotAfter().toInstant());
       if (notBefore.isAfter(now) || !notAfter.isAfter(now)) {
         throw new CertificateIssuanceException(

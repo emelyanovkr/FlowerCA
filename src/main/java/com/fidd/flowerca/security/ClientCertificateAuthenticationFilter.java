@@ -9,6 +9,9 @@ import java.security.cert.X509Certificate;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.TransientDataAccessResourceException;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -29,6 +32,13 @@ public class ClientCertificateAuthenticationFilter extends OncePerRequestFilter 
   }
 
   @Override
+  protected boolean shouldNotFilter(HttpServletRequest request) {
+    String path = request.getRequestURI().substring(request.getContextPath().length());
+    // Public protocols must not depend on the certificate registry being available.
+    return path.equals("/api/v1/public") || path.startsWith("/api/v1/public/");
+  }
+
+  @Override
   protected void doFilterInternal(
       HttpServletRequest request,
       HttpServletResponse response,
@@ -39,8 +49,17 @@ public class ClientCertificateAuthenticationFilter extends OncePerRequestFilter 
       if (certificate != null) {
         try {
           authenticationService.authenticate(certificate).ifPresent(this::authenticate);
+        } catch (DataAccessResourceFailureException | TransientDataAccessResourceException
+            | CannotCreateTransactionException exception) {
+          LOGGER.warn("Client certificate database is unavailable");
+          SecurityErrorResponse.write(response, HttpServletResponse.SC_SERVICE_UNAVAILABLE,
+              "SERVICE_UNAVAILABLE", "Service temporarily unavailable");
+          return;
         } catch (RuntimeException exception) {
-          LOGGER.warn("Client certificate database authentication failed", exception);
+          LOGGER.error("Client certificate authentication failed unexpectedly", exception);
+          SecurityErrorResponse.write(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+              "INTERNAL_ERROR", "Request could not be completed");
+          return;
         }
       }
     }

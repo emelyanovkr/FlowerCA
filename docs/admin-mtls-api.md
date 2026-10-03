@@ -45,3 +45,122 @@ issuer, `ADMIN_CLIENT` profile, and an active owner with role `ADMIN`. Subject C
 
 An unknown-CA certificate fails during TLS before Spring Security. No certificate or an unknown
 database fingerprint receives `401`; a known active non-admin certificate receives `403`.
+
+## Renew the current administrator certificate
+
+Before the current certificate expires, generate a new key and CSR on the administrator's
+workstation. Keep both private keys on that workstation (or hardware token); submit only the CSR.
+
+```shell
+openssl req -new -newkey rsa:3072 -noenc \
+  -keyout renewed-admin.key.pem -out renewed-admin.csr.pem \
+  -subj "/CN=ignored-csr-identity"
+jq -n --rawfile csr renewed-admin.csr.pem '{csrPem: $csr}' > renewal-request.json
+curl --cacert root-ca.cert.pem \
+  --cert first-admin.chain.pem --key first-admin.key.pem \
+  -H 'Content-Type: application/json' --data-binary @renewal-request.json \
+  https://flowerca.example/api/v1/admin/certificates/renew \
+  > renewal-response.json
+jq -r '.certificateChainPem' renewal-response.json > renewed-admin.chain.pem
+```
+
+Check the HTTP status before extracting a certificate. A successful `200` response contains
+`certificateId`, `notBefore`, `notAfter`, and `certificateChainPem` (leaf followed by issuer chain).
+Verify the new chain and `sslclient` purpose as in the bootstrap guide, then test it with the
+protected admin API before switching clients. The old certificate remains valid until its expiry
+unless revoked separately; renewal does not revoke it. Each successful request issues a new
+certificate; retries are not idempotent and also issue a new certificate.
+
+The request has only `csrPem`, bounded to 65,536 characters. It cannot select an owner, role, or
+certificate profile. Identity is rebuilt from the same approved administrator profile. The service
+requires `ADMIN` authority even when invoked from Java, rechecks and locks the current database
+owner/certificate, and commits the new certificate plus `CERTIFICATE_ISSUED` and actor-attributed
+`ADMIN_CERTIFICATE_RENEWED` audits together before the controller can return success.
+
+Profile lifetimes are independently configurable. Defaults remain 30 days for all three profiles:
+
+```yaml
+flowerca:
+  certificates:
+    lifetime:
+      tls-server: 30d
+      user-client: 30d
+      admin-client: 30d
+```
+
+Positive lifetimes of at least one second and at most 3,650 days are accepted. Actual expiry is
+always capped by the configured Intermediate CA expiry; increasing a profile lifetime cannot
+extend the Intermediate. Inspect `notAfter` and renew with enough margin. An immediate renewal
+with an unchanged lifetime need not increase expiry materially.
+
+Expired/revoked certificates cannot renew. An expired bootstrap certificate is not re-exported as
+success. Operator recovery after expiry or loss of the private key is deliberately not implemented
+yet; the renewal endpoint is not a recovery backdoor.
+
+## Error handling and verification limits
+
+Unavailable certificate-registry database access returns constant `503 SERVICE_UNAVAILABLE`, not
+`401`. Unexpected authentication failures return constant `500 INTERNAL_ERROR`. Public routes do
+not query the certificate registry, even if a client certificate is supplied. TLS chain validation
+still happens first and can reject an untrusted certificate on a public route.
+
+MVC errors preserve their HTTP meaning: malformed/invalid input `400`, missing route `404`, wrong
+method `405` (including `Allow`), unsupported request media type `415`, duplicate user `409`, and
+unexpected application failures `500`. Public bodies never include technical exception details.
+
+## Automatic HTTPS/mTLS verification
+
+`MtlsTransportIntegrationTests` starts the real embedded Tomcat server on a random loopback HTTPS
+port with the `mtls` profile. It supplies temporary server and issuer PKCS#12 identities and a
+client-CA truststore through the same external settings used by deployments. No MockMvc request
+certificate injection, replacement security beans, or alternative TLS configuration is used.
+Production issuer loading, registration, application services, persistence and security are exercised
+against the existing MySQL Testcontainer. Docker must be running.
+
+On Windows, run just the transport tests:
+
+```powershell
+.\gradlew.bat test --tests '*MtlsTransportIntegrationTests'
+```
+
+Or run the full suite with `.\gradlew.bat test` (`./gradlew test` on Linux).
+Each of the ten scenarios runs only for TLS 1.3, and successful responses must report TLS 1.3
+as the negotiated protocol. The application still enables TLS 1.2, but the regular transport
+suite no longer verifies it; success on TLS 1.3 does not prove TLS 1.2 compatibility:
+
+| Scenario | Expected result |
+| --- | --- |
+| No client certificate, public probe | HTTPS succeeds, HTTP 200 |
+| No client certificate, admin API | HTTPS succeeds, HTTP 401 |
+| Registered ADMIN_CLIENT, active admin owner | HTTP 201; created user and actor-attributed audit committed |
+| Registered USER_CLIENT | HTTPS succeeds, HTTP 403; no user created |
+| Trusted unregistered certificate copying admin CN and SAN | HTTPS succeeds, HTTP 401 |
+| Actually presented client certificate signed by a foreign CA, even on public route | TLS failure, no HTTP response |
+| Admin certificate paired with an unrelated private key | TLS failure, no HTTP response or user creation |
+| Client does not trust server CA | TLS failure |
+| Client requests 127.0.0.1 while server certificate has only localhost DNS SAN | TLS hostname verification failure |
+| Admin renewal followed by a fresh connection using the new key/certificate | HTTP 200 renewal, committed audit, then HTTP 201 using renewed identity |
+
+Every test client has a fresh SSLContext to avoid TLS-session reuse hiding the handshake. Clients
+use the standard validating Java trust manager and HTTPS hostname verification, never trust-all
+or disabled hostname checks. A test-only key manager explicitly selects the configured client
+identity regardless of the advertised CA list, preventing the foreign-CA case from silently
+omitting its certificate under `client-auth=want`. The rejection tests additionally verify that
+server trust validation succeeded and client identity/chain were selected before the TLS failure.
+
+All material is development-only. The localhost server fixture does not broaden FlowerCA's
+production `.internal` DNS policy. The server identity, Intermediate signing identity and client
+keys are separate; client keys stay in the test client, and no Root private key enters a server
+keystore. Temporary PKCS#12 files use a randomly generated test password and are removed after
+the class; a JVM shutdown fallback handles early Spring initialization failures. No generated
+material is stored in Git.
+
+Verified after narrowing on 2026-10-03: 10 TLS 1.3 transport tests and 90 full-suite tests passed,
+0 failures, 0 errors, 0 skipped, with Docker/MySQL Testcontainers.
+
+Historical verification on 2026-10-03, before narrowing the suite to TLS 1.3: 20 transport tests
+passed for TLS 1.2/1.3, no failures/errors/skips; the full suite passed 100 tests. This is not
+ongoing TLS 1.2 coverage. Existing MockMvc tests remain useful for application cases;
+they are not used as evidence of TLS transport. This verifies embedded Tomcat locally, not a
+deployment proxy/load balancer, a production truststore, or a dedicated admin connector. Manual
+OpenSSL/curl checks against a deployment remain optional operational smoke checks.

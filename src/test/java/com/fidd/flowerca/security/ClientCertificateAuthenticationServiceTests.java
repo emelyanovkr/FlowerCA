@@ -120,6 +120,33 @@ class ClientCertificateAuthenticationServiceTests {
     return new Fixture(service, presented, stored, certificateId, profileId);
   }
 
+  @Test
+  void adminCertificateOwnedByOrdinaryUserDoesNotGrantAdminAuthority() throws Exception {
+    Fixture fixture = fixture(CertificateProfile.ADMIN_CLIENT, UserRole.USER);
+    assertThat(fixture.service.authenticate(fixture.presented).orElseThrow().administrator()).isFalse();
+  }
+
+  @Test
+  void rejectsCertificateBeforeNotBefore() throws Exception {
+    Fixture fixture = fixture(CertificateProfile.ADMIN_CLIENT, UserRole.ADMIN);
+    when(fixture.stored.getNotBefore()).thenReturn(NOW.plusSeconds(1));
+    assertThat(fixture.service.authenticate(fixture.presented)).isEmpty();
+  }
+
+  @Test
+  void retiredIssuerCannotAuthenticate() throws Exception {
+    Fixture fixture = fixture(CertificateProfile.ADMIN_CLIENT, UserRole.ADMIN);
+    when(fixture.stored.getIssuer().getStatus()).thenReturn(CaIssuerStatus.RETIRED);
+    assertThat(fixture.service.authenticate(fixture.presented)).isEmpty();
+  }
+
+  @Test
+  void missingOwnerDoesNotGrantAdminAuthority() throws Exception {
+    Fixture fixture = fixture(CertificateProfile.ADMIN_CLIENT, UserRole.ADMIN);
+    when(fixture.stored.getUserProfile()).thenReturn(null);
+    assertThat(fixture.service.authenticate(fixture.presented).orElseThrow().administrator()).isFalse();
+  }
+
   private record Fixture(
       ClientCertificateAuthenticationService service,
       X509Certificate presented,

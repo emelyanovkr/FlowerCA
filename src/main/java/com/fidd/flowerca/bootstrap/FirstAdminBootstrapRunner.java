@@ -1,5 +1,6 @@
 package com.fidd.flowerca.bootstrap;
 
+import com.fidd.flowerca.certificate.CertificateChainPemEncoder;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;

@@ -30,6 +30,7 @@ import java.security.cert.X509Certificate;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.Locale;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -160,6 +161,15 @@ public class FirstAdminBootstrapService {
     }
 
     X509Certificate storedCertificate = decode(certificate.getCertificateDer());
+    Instant now = clock.instant();
+    if (now.isBefore(certificate.getNotBefore()) || !now.isBefore(certificate.getNotAfter())) {
+      throw new AdminBootstrapException("Completed bootstrap certificate is not currently valid");
+    }
+    try {
+      storedCertificate.checkValidity(Date.from(now));
+    } catch (CertificateException exception) {
+      throw new AdminBootstrapException("Completed bootstrap certificate is not currently valid", exception);
+    }
     if (!Arrays.equals(
         storedCertificate.getPublicKey().getEncoded(), parsedCsr.publicKey().getEncoded())) {
       throw new AdminBootstrapException(

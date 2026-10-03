@@ -76,9 +76,13 @@ public final class TestPki {
   }
 
   public String createCsrPem(String... dnsNames) throws Exception {
+    return createCsrPem(clientKeyPair, dnsNames);
+  }
+
+  public static String createCsrPem(KeyPair keys, String... dnsNames) throws Exception {
     X500Name subject = new X500Name("CN=service-a.internal,O=FlowerCA Client,C=RU");
     JcaPKCS10CertificationRequestBuilder builder =
-        new JcaPKCS10CertificationRequestBuilder(subject, clientKeyPair.getPublic());
+        new JcaPKCS10CertificationRequestBuilder(subject, keys.getPublic());
 
     GeneralName[] names = new GeneralName[dnsNames.length];
     for (int index = 0; index < dnsNames.length; index++) {
@@ -90,7 +94,7 @@ public final class TestPki {
         PKCSObjectIdentifiers.pkcs_9_at_extensionRequest, extensions.generate());
 
     ContentSigner signer =
-        new JcaContentSignerBuilder("SHA256withRSA").build(clientKeyPair.getPrivate());
+        new JcaContentSignerBuilder("SHA256withRSA").build(keys.getPrivate());
     PKCS10CertificationRequest request = builder.build(signer);
     StringWriter output = new StringWriter();
     try (JcaPEMWriter writer = new JcaPEMWriter(output)) {

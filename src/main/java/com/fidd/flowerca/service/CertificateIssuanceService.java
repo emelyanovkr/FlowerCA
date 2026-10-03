@@ -10,6 +10,9 @@ import com.fidd.flowerca.persistence.IssuedCertificatePersistenceService;
 import com.fidd.flowerca.persistence.entity.CertificateEntity;
 import com.fidd.flowerca.persistence.entity.UserProfileEntity;
 import com.fidd.flowerca.persistence.model.CertificateProfile;
+import com.fidd.flowerca.persistence.model.UserRole;
+import com.fidd.flowerca.persistence.model.UserStatus;
+import com.fidd.flowerca.policy.CertificatePolicyException;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
@@ -48,6 +51,10 @@ public class CertificateIssuanceService {
 
   public PersistedCertificateIssuance issueAdminClient(
       String csrPem, UserProfileEntity owner) {
+    if (owner == null || owner.getId() == null
+        || owner.getRole() != UserRole.ADMIN || owner.getStatus() != UserStatus.ACTIVE) {
+      throw new CertificatePolicyException("Admin certificate requires an active admin owner");
+    }
     return issueClient(csrPem, owner, CertificateProfile.ADMIN_CLIENT);
   }
 
