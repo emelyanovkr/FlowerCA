@@ -3,6 +3,8 @@ package com.fidd.flowerca.api;
 import com.fidd.flowerca.api.admin.UserAlreadyExistsException;
 import com.fidd.flowerca.policy.CertificatePolicyException;
 import com.fidd.flowerca.csr.CsrParsingException;
+import com.fidd.flowerca.service.admin.CertificateNotFoundException;
+import com.fidd.flowerca.service.admin.InvalidCertificateQueryException;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,9 +31,15 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     return error(HttpStatus.CONFLICT, "USER_ALREADY_EXISTS", "User already exists");
   }
 
-  @ExceptionHandler({CertificatePolicyException.class, CsrParsingException.class})
+  @ExceptionHandler({CertificatePolicyException.class, CsrParsingException.class,
+      InvalidCertificateQueryException.class})
   public ResponseEntity<Map<String, String>> invalidRequest() {
     return error(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "Request is invalid");
+  }
+
+  @ExceptionHandler(CertificateNotFoundException.class)
+  public ResponseEntity<Map<String, String>> certificateNotFound() {
+    return error(HttpStatus.NOT_FOUND, "NOT_FOUND", "Resource not found");
   }
 
   @Override

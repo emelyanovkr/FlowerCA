@@ -8,6 +8,7 @@ import com.fidd.flowerca.persistence.model.AuditResult;
 import com.fidd.flowerca.persistence.model.AuditTargetType;
 import com.fidd.flowerca.persistence.model.CaIssuerStatus;
 import com.fidd.flowerca.persistence.model.CertificateProfile;
+import com.fidd.flowerca.persistence.model.CertificateEffectiveStatus;
 import com.fidd.flowerca.persistence.model.CertificateStatus;
 import com.fidd.flowerca.persistence.model.UserRole;
 import com.fidd.flowerca.persistence.model.UserStatus;
@@ -19,6 +20,8 @@ import com.fidd.flowerca.service.CertificateIssuanceService;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
+import java.util.UUID;
+import org.springframework.data.domain.Pageable;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -28,7 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @ConditionalOnProperty(prefix = "flowerca.issuer", name = "enabled",
     havingValue = "true", matchIfMissing = true)
-public class AdminCertificateRenewalService implements AdminCertificateRenewalUseCase {
+@PreAuthorize("hasAuthority('ADMIN')")
+public class AdminCertificateService {
 
   private final UserProfileRepository users;
   private final CertificateRepository certificates;
@@ -36,7 +40,7 @@ public class AdminCertificateRenewalService implements AdminCertificateRenewalUs
   private final AuditEventRepository audit;
   private final CertificateChainPemEncoder pemEncoder;
 
-  public AdminCertificateRenewalService(
+  public AdminCertificateService(
       UserProfileRepository users, CertificateRepository certificates,
       CertificateIssuanceService issuance, AuditEventRepository audit,
       CertificateChainPemEncoder pemEncoder) {
@@ -47,7 +51,30 @@ public class AdminCertificateRenewalService implements AdminCertificateRenewalUs
     this.pemEncoder = pemEncoder;
   }
 
-  @Override
+  @Transactional(readOnly = true)
+  public CertificatePage list(
+      UUID ownerId, CertificateProfile profile,
+      CertificateEffectiveStatus effectiveStatus,
+      Pageable pageable) {
+    Pageable boundedPage = CertificatePagination.validate(pageable);
+    Instant now = Instant.now();
+    var page = certificates.findMetadataPage(ownerId, profile,
+        effectiveStatus == null ? null : effectiveStatus.name(), now, boundedPage);
+    return new CertificatePage(page.getContent().stream()
+        .map(row -> CertificateView.from(row, now)).toList(),
+        page.getNumber(), page.getSize(), page.getTotalElements(), page.getTotalPages());
+  }
+
+  @Transactional(readOnly = true)
+  public CertificateView get(UUID id) {
+    if (id == null) {
+      throw new InvalidCertificateQueryException();
+    }
+    Instant now = Instant.now();
+    return CertificateView.from(certificates.findMetadataById(id)
+        .orElseThrow(CertificateNotFoundException::new), now);
+  }
+
   @PreAuthorize("hasAuthority('ADMIN') and #actor == authentication.principal")
   @Transactional
   public AdminCertificateRenewal renew(

@@ -1,5 +1,10 @@
 # Admin mTLS API
 
+Пошаговое объяснение на примере Анны и Бориса, схема взаимодействия и структура
+SecurityContext: [Как работает административный mTLS endpoint](admin-mtls-flow.md).
+
+План следующих маршрутов и инкрементов: [API заявок и сертификатов](certificate-request-api-plan.md).
+
 FlowerCA exposes public and administrative routes on the shared HTTPS listener. The listener uses
 `client-auth=want`: callers without a client certificate can reach public routes, while Spring
 Security requires a database-authorized `ADMIN_CLIENT` certificate for `/api/v1/admin/**`.
@@ -45,6 +50,62 @@ issuer, `ADMIN_CLIENT` profile, and an active owner with role `ADMIN`. Subject C
 
 An unknown-CA certificate fails during TLS before Spring Security. No certificate or an unknown
 database fingerprint receives `401`; a known active non-admin certificate receives `403`.
+
+## Read the certificate registry
+
+`GET /api/v1/admin/certificates` and `GET /api/v1/admin/certificates/{id}` require the same
+registered active admin identity as other admin routes, plus service-level `ADMIN` method security.
+List, detail and renewal live in one `AdminCertificateController` / `AdminCertificateService`.
+There is no separate read-only operating mode: `flowerca.issuer.enabled=false` disables all
+certificate admin routes. Normal operation requires the configured Intermediate signing module.
+Reads return registry metadata, not certificate DER/PEM or private keys.
+The list covers all certificate profiles and owners; it is not limited to the caller's certificates.
+
+List query parameters:
+
+| Parameter | Meaning / default |
+| --- | --- |
+| `ownerId` | Optional user-profile UUID |
+| `profile` | Optional `TLS_SERVER`, `USER_CLIENT`, `ADMIN_CLIENT` |
+| `effectiveStatus` | Optional `ACTIVE`, `NOT_YET_VALID`, `EXPIRED`, `REVOKED` |
+| `page` | Zero-based page, default `0` |
+| `size` | `1..100`, default `50` |
+| `sort` | Standard Spring `Pageable` sorting, default `createdAt,desc` |
+
+The controller accepts `Pageable`; Spring resolves `page`, `size`, `sort` from query parameters.
+Allowed sort fields: `createdAt`, `notBefore`, `notAfter`, `id`; directions: `asc`, `desc`.
+An omitted direction means ascending; repeated sort parameters are supported, e.g.
+`sort=notAfter,asc&sort=createdAt,desc`. At most four sort orders, no ignore-case/null-order modifiers.
+Unless ID is already present, an ID tie-breaker uses the first order's direction.
+The certificate-specific resolver rejects invalid/duplicate numeric page/size values with 400
+instead of silently replacing or clamping them; the service also validates direct Java input.
+Blank numeric parameters use defaults. Pagination uses offset; changes to the registry
+between HTTP requests can move records between pages. Excessive integer offsets are rejected.
+
+```shell
+curl --cacert root-ca.cert.pem \
+  --cert first-admin.chain.pem --key first-admin.key.pem \
+  'https://flowerca.example/api/v1/admin/certificates?profile=USER_CLIENT&effectiveStatus=ACTIVE&page=0&size=50&sort=notAfter,asc'
+```
+
+The stable page envelope is `content`, `page`, `size`, `totalElements`, `totalPages`.
+An empty/out-of-range page returns `200` with empty content and the matching total.
+Each list item and detail contains `id`, `owner` (`id`, `displayName`, `email`) or null for an
+ownerless server certificate, `issuer` (`id`, `subjectDn`), `serialNumberHex`,
+`fingerprintSha256Hex`, `profile`, `storedStatus`, `effectiveStatus`, `subjectDn`,
+`notBefore`, `notAfter`, `revokedAt`, `revocationReason`, `createdAt`.
+Hex is lowercase; serial is unsigned without padding, SHA-256 fingerprint has 64 digits.
+Owner name/email are current profile metadata; `subjectDn` is the identity stored at issuance.
+
+Effective status is evaluated at one instant per request: stored `REVOKED` takes precedence;
+stored `EXPIRED` or `now >= notAfter` yields `EXPIRED`; otherwise `now < notBefore` yields
+`NOT_YET_VALID`, and the remaining certificate is `ACTIVE`. Reads never update stored status.
+This describes the certificate's lifecycle, not whether its owner/issuer is authorized to log in.
+DTO queries live in the shared `CertificateRepository` as JPQL constructor projections, not
+entity fetches. Spring Data may omit a count query when the returned page already proves the total.
+Invalid parameters/UUID -> constant `400 INVALID_REQUEST`; unknown certificate -> constant
+`404 NOT_FOUND`. No certificate -> `401`, known non-admin identity -> `403`.
+PEM download and revocation remain separate planned increments.
 
 ## Renew the current administrator certificate
 

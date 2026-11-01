@@ -11,6 +11,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+// todo: hashicorp vault open source analogue
+//  discovery service
+
 @RestController
 @RequestMapping("/api/v1/admin/users")
 public class AdminUserController {

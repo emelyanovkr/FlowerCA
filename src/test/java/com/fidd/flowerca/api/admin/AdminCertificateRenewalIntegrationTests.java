@@ -21,7 +21,7 @@ import com.fidd.flowerca.policy.InternalCertificatePolicy;
 import com.fidd.flowerca.security.ClientCertificateAuthenticationFilter;
 import com.fidd.flowerca.security.ClientCertificatePrincipal;
 import com.fidd.flowerca.service.CertificateIssuanceService;
-import com.fidd.flowerca.service.admin.AdminCertificateRenewalUseCase;
+import com.fidd.flowerca.service.admin.AdminCertificateService;
 import com.fidd.flowerca.service.admin.RenewAdminCertificateCommand;
 import com.fidd.flowerca.testsupport.MySqlTestcontainerConfiguration;
 import com.fidd.flowerca.testsupport.TestPki;
@@ -74,7 +74,7 @@ class AdminCertificateRenewalIntegrationTests {
   @Autowired private CertificateIssuanceService issuance;
   @Autowired private IssuedCertificatePersistenceService persistence;
   @Autowired private IssuerIdentity issuer;
-  @Autowired private AdminCertificateRenewalUseCase renewal;
+  @Autowired private AdminCertificateService renewal;
   @Autowired private JdbcTemplate jdbc;
   @Autowired private FilterRegistrationBean<ClientCertificateAuthenticationFilter> registration;
 
